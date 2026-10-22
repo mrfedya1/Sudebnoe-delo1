@@ -203,17 +203,21 @@
 </div>
 
 <script>
-// Инициализация состояния с проверкой сохранений
+// Инициализация состояния
 let state = {
   fio: "",
   activeCases: [],
   attachedFile: null
 };
 
-// Загружаем сохраненные дела из памяти браузера
-const savedCases = localStorage.getItem('courtActiveCases');
-if (savedCases) {
-  state.activeCases = JSON.parse(savedCases);
+// Загрузка сохраненных дел
+try {
+  const saved = localStorage.getItem('gospravosudie_cases');
+  if (saved) {
+    state.activeCases = JSON.parse(saved);
+  }
+} catch(e) {
+  console.warn("Ошибка загрузки localStorage:", e);
 }
 
 const now = new Date();
@@ -235,10 +239,6 @@ document.querySelectorAll('.menu-item').forEach(item => {
   });
 });
 
-document.getElementById('fio-input').addEventListener('input', (e) => {
-  state.fio = e.target.value;
-});
-
 // Автозаполнение при выборе статьи
 document.getElementById('case-select').addEventListener('change', (e) => {
   const type = e.target.value;
@@ -251,11 +251,9 @@ document.getElementById('case-select').addEventListener('change', (e) => {
   }
 });
 
-// Принудительный триггер для первой статьи
-setTimeout(() => {
-  const caseSelect = document.getElementById('case-select');
-  if (caseSelect) caseSelect.dispatchEvent(new Event('change'));
-}, 100);
+// Триггер для первой статьи при загрузке
+const caseSelect = document.getElementById('case-select');
+if (caseSelect) caseSelect.dispatchEvent(new Event('change'));
 
 const uploadBox = document.getElementById('file-upload-box');
 const fileInput = document.getElementById('real-file-input');
@@ -297,7 +295,6 @@ document.getElementById('submit-claim').addEventListener('click', () => {
   const caseId = `2-${Math.floor(Math.random() * 9000) + 1000}/${new Date().getFullYear()}`;
   const nowMs = Date.now();
   
-  // Тайминги в миллисекундах (для сохранения)
   const acceptDeadline = nowMs + (3 * 24 * 60 * 60 * 1000); // +3 дня
   const hearingDeadline = acceptDeadline + (10 * 24 * 60 * 60 * 1000); // +10 дней
   
@@ -311,13 +308,19 @@ document.getElementById('submit-claim').addEventListener('click', () => {
     status: "Зарегистрирован",
     statusClass: "status-pending",
     hearingDate: "Не назначено",
-    stage: 1, // 1 - Ожидание принятия, 2 - Ожидание заседания
+    stage: 1,
     acceptDeadline: acceptDeadline,
     hearingDeadline: hearingDeadline
   };
 
   state.activeCases.push(newCase);
-  localStorage.setItem('courtActiveCases', JSON.stringify(state.activeCases)); // СОХРАНЕНИЕ!
+  
+  // Железобетонное сохранение
+  try {
+    localStorage.setItem('gospravosudie_cases', JSON.stringify(state.activeCases));
+  } catch(e) {
+    console.error("Не удалось сохранить", e);
+  }
 
   state.attachedFile = null;
   uploadBox.classList.remove('success');
@@ -332,7 +335,7 @@ document.getElementById('submit-claim').addEventListener('click', () => {
   processTimers();
 });
 
-// Функция проверки времени (вызывается при загрузке и раз в минуту)
+// Обработка времени
 function processTimers() {
   if (state.activeCases.length === 0) return;
   
@@ -352,27 +355,26 @@ function processTimers() {
     } 
     
     if (c.stage === 2 && nowMs >= c.hearingDeadline) {
-      // Оценка доказательств (если файл не был мемом)
       c.status = "Заседание завершено (Иск удовлетворен)";
       c.statusClass = "status-closed";
       c.hearingDate = "Завершено";
       hasChanges = true;
-      showModal(`Суд вынес решение в вашу пользу по делу ${c.id}. ${c.defendant} обязан выплатить ${c.amount} руб.`, "Решение суда");
+      showModal(`Суд вынес решение в вашу пользу. ${c.defendant} обязан выплатить ${c.amount} руб.`, "Решение суда");
     }
 
-    // Определяем, какое дело сейчас в процессе ожидания (для таймера)
     if (c.status !== "Заседание завершено (Иск удовлетворен)" && c.status !== "Отказ в иске") {
       activeWaitingCase = c;
     }
   });
 
   if (hasChanges) {
-    localStorage.setItem('courtActiveCases', JSON.stringify(state.activeCases));
+    try {
+      localStorage.setItem('gospravosudie_cases', JSON.stringify(state.activeCases));
+    } catch(e) {}
     renderCases();
     renderCalendar();
   }
 
-  // Обновление таймера на экране
   const waitingBox = document.getElementById('waiting-notification');
   const timerDisplay = document.getElementById('waiting-timer-display');
   const exactDateDisplay = document.getElementById('waiting-exact-date');
@@ -399,9 +401,15 @@ function processTimers() {
   }
 }
 
-// Запуск таймера обновления каждые 5 секунд
-setInterval(processTimers, 5000);
-processTimers(); // Первичная проверка при загрузке страницы
+// Обновление таймера и сохранение каждые 5 секунд
+setInterval(() => {
+  processTimers();
+  try {
+    localStorage.setItem('gospravosudie_cases', JSON.stringify(state.activeCases));
+  } catch(e) {}
+}, 5000);
+
+processTimers();
 
 function renderCases() {
   const tbody = document.getElementById('case-list');
