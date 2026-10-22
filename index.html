@@ -203,23 +203,28 @@
 </div>
 
 <script>
-// Инициализация состояния
-let state = {
-  fio: "",
-  activeCases: [],
-  attachedFile: null
-};
+// Инициализация массива дел (без localStorage на старте)
+let activeCases = [];
 
-// Загрузка сохраненных дел
-try {
-  const saved = localStorage.getItem('gospravosudie_cases');
+// Загрузка сохраненных дел (как в копилке)
+function loadData() {
+  const saved = localStorage.getItem('courtCases_v2');
   if (saved) {
-    state.activeCases = JSON.parse(saved);
+    try {
+      activeCases = JSON.parse(saved);
+    } catch (e) {
+      console.error("Ошибка загрузки дел:", e);
+      activeCases = [];
+    }
   }
-} catch(e) {
-  console.warn("Ошибка загрузки localStorage:", e);
 }
 
+// Функция сохранения (вызывается при каждом изменении)
+function saveData() {
+  localStorage.setItem('courtCases_v2', JSON.stringify(activeCases));
+}
+
+// Инициализация даты
 const now = new Date();
 document.getElementById('current-date').textContent = now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
 
@@ -230,6 +235,7 @@ const caseSettings = {
   copyright: { amount: 100000, fee: 2000, court: "Липецкий районный суд Липецкой области" }
 };
 
+// Переключение вкладок
 document.querySelectorAll('.menu-item').forEach(item => {
   item.addEventListener('click', () => {
     document.querySelectorAll('.menu-item').forEach(i => i.classList.remove('active'));
@@ -239,11 +245,10 @@ document.querySelectorAll('.menu-item').forEach(item => {
   });
 });
 
-// Автозаполнение при выборе статьи
+// Автозаполнение формы
 document.getElementById('case-select').addEventListener('change', (e) => {
   const type = e.target.value;
   const settings = caseSettings[type];
-  
   if (settings) {
     document.getElementById('court-input').value = settings.court;
     document.getElementById('amount-input').value = settings.amount;
@@ -251,14 +256,16 @@ document.getElementById('case-select').addEventListener('change', (e) => {
   }
 });
 
-// Триггер для первой статьи при загрузке
+// Триггер для первой опции
 const caseSelect = document.getElementById('case-select');
 if (caseSelect) caseSelect.dispatchEvent(new Event('change'));
 
+// Логика загрузки файла
 const uploadBox = document.getElementById('file-upload-box');
 const fileInput = document.getElementById('real-file-input');
 const uploadText = document.getElementById('upload-text');
 const fileNameDisplay = document.getElementById('file-name-display');
+let attachedFileName = null;
 
 uploadBox.addEventListener('click', () => fileInput.click());
 
@@ -276,27 +283,26 @@ fileInput.addEventListener('change', (e) => {
     fileInput.value = '';
     return;
   }
-  state.attachedFile = file.name;
+  attachedFileName = file.name;
   uploadBox.classList.add('success');
   uploadText.textContent = "✓ Файл успешно прикреплен";
   fileNameDisplay.textContent = file.name;
   fileNameDisplay.style.display = 'block';
 });
 
+// Подача иска
 document.getElementById('submit-claim').addEventListener('click', () => {
+  const fio = document.getElementById('fio-input').value.trim();
   const caseType = document.getElementById('case-select').value;
   const caseText = document.getElementById('case-select').options[document.getElementById('case-select').selectedIndex].text;
   const defendant = document.getElementById('defendant-select').value;
   const settings = caseSettings[caseType];
 
-  if (!state.fio) { alert("Введите ФИО!"); return; }
-  if (!state.attachedFile) { alert("Прикрепите доказательства!"); return; }
+  if (!fio) { alert("Введите ФИО!"); return; }
+  if (!attachedFileName) { alert("Прикрепите доказательства!"); return; }
 
   const caseId = `2-${Math.floor(Math.random() * 9000) + 1000}/${new Date().getFullYear()}`;
   const nowMs = Date.now();
-  
-  const acceptDeadline = nowMs + (3 * 24 * 60 * 60 * 1000); // +3 дня
-  const hearingDeadline = acceptDeadline + (10 * 24 * 60 * 60 * 1000); // +10 дней
   
   const newCase = {
     id: caseId,
@@ -309,20 +315,15 @@ document.getElementById('submit-claim').addEventListener('click', () => {
     statusClass: "status-pending",
     hearingDate: "Не назначено",
     stage: 1,
-    acceptDeadline: acceptDeadline,
-    hearingDeadline: hearingDeadline
+    acceptDeadline: nowMs + (3 * 24 * 60 * 60 * 1000), // 3 дня
+    hearingDeadline: nowMs + (13 * 24 * 60 * 60 * 1000) // 13 дней
   };
 
-  state.activeCases.push(newCase);
-  
-  // Железобетонное сохранение
-  try {
-    localStorage.setItem('gospravosudie_cases', JSON.stringify(state.activeCases));
-  } catch(e) {
-    console.error("Не удалось сохранить", e);
-  }
+  activeCases.push(newCase);
+  saveData(); // СОХРАНЕНИЕ В ПАМЯТЬ
 
-  state.attachedFile = null;
+  // Сброс формы
+  attachedFileName = null;
   uploadBox.classList.remove('success');
   uploadText.textContent = "Нажмите, чтобы выбрать файл";
   fileNameDisplay.style.display = 'none';
@@ -331,19 +332,19 @@ document.getElementById('submit-claim').addEventListener('click', () => {
   document.querySelector('.menu-item[data-tab="my-cases"]').click();
   renderCases();
   
-  showModal(`Иск против ${defendant} зарегистрирован под номером ${caseId}. Ожидайте.`, "Уведомление суда");
+  showModal(`Иск против ${defendant} зарегистрирован. Ожидайте.`, "Уведомление суда");
   processTimers();
 });
 
 // Обработка времени
 function processTimers() {
-  if (state.activeCases.length === 0) return;
+  if (activeCases.length === 0) return;
   
   const nowMs = Date.now();
   let hasChanges = false;
   let activeWaitingCase = null;
 
-  state.activeCases.forEach(c => {
+  activeCases.forEach(c => {
     if (c.status === "Заседание завершено (Иск удовлетворен)" || c.status === "Отказ в иске") return;
 
     if (c.stage === 1 && nowMs >= c.acceptDeadline) {
@@ -351,7 +352,6 @@ function processTimers() {
       c.statusClass = "status-accepted";
       c.stage = 2;
       hasChanges = true;
-      showModal(`Дело ${c.id} против ${c.defendant} принято к производству.`, "Уведомление суда");
     } 
     
     if (c.stage === 2 && nowMs >= c.hearingDeadline) {
@@ -359,7 +359,6 @@ function processTimers() {
       c.statusClass = "status-closed";
       c.hearingDate = "Завершено";
       hasChanges = true;
-      showModal(`Суд вынес решение в вашу пользу. ${c.defendant} обязан выплатить ${c.amount} руб.`, "Решение суда");
     }
 
     if (c.status !== "Заседание завершено (Иск удовлетворен)" && c.status !== "Отказ в иске") {
@@ -368,9 +367,7 @@ function processTimers() {
   });
 
   if (hasChanges) {
-    try {
-      localStorage.setItem('gospravosudie_cases', JSON.stringify(state.activeCases));
-    } catch(e) {}
+    saveData(); // СОХРАНЯЕМ ПРИ ИЗМЕНЕНИИ СТАТУСА
     renderCases();
     renderCalendar();
   }
@@ -381,7 +378,6 @@ function processTimers() {
 
   if (activeWaitingCase) {
     waitingBox.style.display = 'block';
-    
     const targetTime = activeWaitingCase.stage === 1 ? activeWaitingCase.acceptDeadline : activeWaitingCase.hearingDeadline;
     const diffMs = targetTime - nowMs;
     
@@ -401,26 +397,20 @@ function processTimers() {
   }
 }
 
-// Обновление таймера и сохранение каждые 5 секунд
-setInterval(() => {
-  processTimers();
-  try {
-    localStorage.setItem('gospravosudie_cases', JSON.stringify(state.activeCases));
-  } catch(e) {}
-}, 5000);
+// Обновление таймера каждые 5 секунд
+setInterval(processTimers, 5000);
 
-processTimers();
-
+// Отрисовка таблицы
 function renderCases() {
   const tbody = document.getElementById('case-list');
   tbody.innerHTML = '';
   
-  if (state.activeCases.length === 0) {
+  if (activeCases.length === 0) {
     tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #999;">У вас пока нет дел</td></tr>';
     return;
   }
 
-  state.activeCases.forEach(c => {
+  activeCases.forEach(c => {
     const tr = document.createElement('tr');
     tr.innerHTML = `
       <td>${c.id}</td>
@@ -435,9 +425,10 @@ function renderCases() {
   });
 }
 
+// Отрисовка календаря
 function renderCalendar() {
   const cal = document.getElementById('calendar-content');
-  const events = state.activeCases.filter(c => c.status === "Принят к производству" || c.status === "Заседание завершено (Иск удовлетворен)");
+  const events = activeCases.filter(c => c.status === "Принят к производству" || c.status === "Заседание завершено (Иск удовлетворен)");
   
   if (events.length === 0) {
     cal.innerHTML = 'У вас пока нет назначенных заседаний.';
@@ -457,7 +448,15 @@ function showModal(text, title = "Уведомление суда") {
   document.getElementById('modal-overlay').style.display = 'flex';
 }
 
-renderCases();
+// Инициализация при загрузке
+loadData(); // Загружаем сохраненные данные
+renderCases(); // Рисуем таблицу
+processTimers(); // Запускаем проверку времени
+
+// Принудительное сохранение при закрытии страницы
+window.addEventListener('beforeunload', () => {
+  saveData();
+});
 </script>
 </body>
 </html>
