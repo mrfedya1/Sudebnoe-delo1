@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ГАС Правосудие: Истец</title>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    background: #e0e0e0; color: #333; height: 100vh;
+    display: flex; flex-direction: column; overflow: hidden;
+  }
+
+  .top-bar {
+    background: #1a3b5c; color: #fff; padding: 10px 20px;
+    display: flex; justify-content: space-between; align-items: center;
+    font-size: 14px; box-shadow: 0 2px 5px rgba(0,0,0,0.2); z-index: 10;
+  }
+  .top-bar .logo { font-weight: bold; font-size: 16px; letter-spacing: 1px; }
+  .top-bar .date-info { color: #a8cce6; font-size: 13px; }
+
+  .main-container { display: flex; flex: 1; overflow: hidden; }
+
+  .sidebar {
+    width: 250px; background: #f5f5f5; border-right: 1px solid #ccc;
+    display: flex; flex-direction: column;
+  }
+  .menu-item {
+    padding: 15px 20px; cursor: pointer; border-bottom: 1px solid #e0e0e0;
+    transition: background 0.2s; font-weight: 500;
+  }
+  .menu-item:hover { background: #e8e8e8; }
+  .menu-item.active { background: #d0e4f5; border-left: 4px solid #1a3b5c; }
+
+  .workspace {
+    flex: 1; padding: 20px; background: #fff; overflow-y: auto; position: relative;
+  }
+
+  .form-group { margin-bottom: 15px; }
+  label { display: block; margin-bottom: 5px; font-weight: 500; font-size: 14px; color: #555; }
+  input, select {
+    width: 100%; padding: 8px; border: 1px solid #ccc; border-radius: 4px;
+    font-family: inherit; font-size: 14px;
+  }
+  input:disabled { background: #e9ecef; color: #6c757d; font-weight: bold; }
+  
+  button {
+    padding: 10px 20px; background: #1a3b5c; color: #fff;
+    border: none; border-radius: 4px; cursor: pointer; font-size: 14px;
+    transition: background 0.2s;
+  }
+  button:hover { background: #2c5a85; }
+  button:disabled { background: #999; cursor: not-allowed; }
+
+  .case-table { width: 100%; border-collapse: collapse; margin-top: 20px; font-size: 14px; }
+  .case-table th, .case-table td { border: 1px solid #ddd; padding: 10px; text-align: left; }
+  .case-table th { background: #f0f0f0; font-weight: bold; }
+  .status-badge { padding: 4px 8px; border-radius: 12px; font-size: 12px; font-weight: bold; white-space: nowrap; }
+  .status-pending { background: #fff3cd; color: #856404; }
+  .status-accepted { background: #d4edda; color: #155724; }
+  .status-hearing { background: #cce5ff; color: #004085; }
+  .status-closed { background: #e2e3e5; color: #383d41; }
+  .status-denied { background: #f8d7da; color: #721c24; }
+
+  .modal-overlay {
+    position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+    background: rgba(0,0,0,0.5); display: none; align-items: center; justify-content: center; z-index: 100;
+  }
+  .modal {
+    background: #fff; padding: 20px; border-radius: 8px; width: 450px; box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+  }
+  .modal h3 { margin-bottom: 15px; color: #1a3b5c; }
+
+  .waiting-box {
+    background: #f8f9fa; border: 1px solid #ccc; padding: 20px; margin-bottom: 20px; text-align: center;
+  }
+  .waiting-timer { font-size: 32px; font-weight: bold; color: #1a3b5c; margin: 10px 0; }
+  .waiting-exact-date { font-size: 13px; color: #555; font-weight: bold; margin-top: 5px; }
+
+  .file-upload-wrapper {
+    border: 1px dashed #999; padding: 15px; text-align: center; background: #f9f9f9; border-radius: 4px;
+    cursor: pointer; transition: background 0.2s;
+  }
+  .file-upload-wrapper:hover { background: #eef; border-color: #1a3b5c; }
+  .file-upload-wrapper.success { border-color: #28a745; background: #d4edda; border-style: solid; }
+  .file-name { font-size: 13px; color: #28a745; margin-top: 5px; font-weight: bold; display: none; }
+  #real-file-input { display: none; }
+</style>
+</head>
+<body>
+
+<div class="top-bar">
+  <div class="logo">ГАС «Правосудие» | Липецкая область</div>
+  <div class="date-info" id="current-date"></div>
+</div>
+
+<div class="main-container">
+  <div class="sidebar">
+    <div class="menu-item active" data-tab="new-case">Подача иска</div>
+    <div class="menu-item" data-tab="my-cases">Мои дела</div>
+    <div class="menu-item" data-tab="calendar">Календарь</div>
+  </div>
+
+  <div class="workspace" id="workspace">
+    <div id="tab-new-case">
+      <h2 style="margin-bottom: 20px;">Новое дело</h2>
+      
+      <div class="form-group">
+        <label>ФИО (Истец)</label>
+        <input type="text" id="fio-input" placeholder="Беликов Фёдор Алексеевич">
+      </div>
+
+      <div class="form-group">
+        <label>Кого судим (Ответчик)</label>
+        <select id="defendant-select">
+          <option value="Иванников Михаил Денисович">Иванников Михаил Денисович</option>
+          <option value="Шабанов Михаил Викторович">Шабанов Михаил Викторович</option>
+          <option value="Валуев Иван Иванович">Валуев Иван Иванович</option>
+          <option value="Потапова Анна Дмитриевна">Потапова Анна Дмитриевна</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Основание / Статья</label>
+        <select id="case-select">
+          <option value="dtp">Возмещение ущерба от ДТП (ст. 1064, 1079 ГК РФ)</option>
+          <option value="debt">Взыскание долга по расписке (ст. 807, 810 ГК РФ)</option>
+          <option value="builder">Защита прав дольщика (ст. 6 ФЗ-214)</option>
+          <option value="consumer">Защита прав потребителей (ст. 18 ЗоЗПП)</option>
+          <option value="labor">Восстановление на работе (ст. 192, 394 ТК РФ)</option>
+          <option value="family">Взыскание алиментов (ст. 80, 81 СК РФ)</option>
+          <option value="honor">Защита чести и достоинства (ст. 152 ГК РФ)</option>
+          <option value="property">Раздел совместно нажитого имущества (ст. 38 СК РФ)</option>
+          <option value="rent">Выселение из жилого помещения (ст. 35 ЖК РФ)</option>
+          <option value="land">Земельный спор (ст. 60 ЗК РФ)</option>
+          <option value="copyright">Нарушение авторских прав (ст. 1252 ГК РФ)</option>
+          <option value="medical">Вред от некачественной мед. услуги (ст. 1068 ГК РФ)</option>
+          <option value="insurance">Взыскание со страховой (ст. 929 ГК РФ)</option>
+          <option value="credit">Спор с банком по кредиту (ст. 819 ГК РФ)</option>
+          <option value="bankrupt">Банкротство физического лица (ФЗ-127)</option>
+          <option value="tax">Налоговый спор (ст. 137 НК РФ)</option>
+          
+          <option value="traffic">Обжалование штрафа ГИБДД (гл. 30 КоАП РФ)</option>
+          <option value="admin_drunk">Пьяный в общественном месте (ст. 20.21 КоАП РФ)</option>
+          <option value="admin_speed">Превышение скорости (ст. 12.9 КоАП РФ)</option>
+          <option value="admin_smoking">Курение в неположенном месте (ст. 6.24 КоАП РФ)</option>
+          <option value="admin_miting">Нарушение правил митинга (ст. 20.2 КоАП РФ)</option>
+          <option value="admin_fake">Мелкое хулиганство (ст. 20.1 КоАП РФ)</option>
+          
+          <option value="terror">Террористический акт (ст. 205 УК РФ)</option>
+          <option value="extremism">Возбуждение ненависти (ст. 282 УК РФ)</option>
+          <option value="fraud">Мошенничество (ст. 159 УК РФ)</option>
+          <option value="theft">Кража (ст. 158 УК РФ)</option>
+          <option value="bribe">Взятка (ст. 290, 291 УК РФ)</option>
+          <option value="drugs">Хранение наркотиков (ст. 228 УК РФ)</option>
+          <option value="fake_news">Фейки о ВС РФ (ст. 207.3 УК РФ)</option>
+          <option value="hooligan">Хулиганство (ст. 213 УК РФ)</option>
+          <option value="murder">Убийство (ст. 105 УК РФ)</option>
+          
+          <option value="foreign_agent">Уклонение от обязанностей иноагента (ст. 330.1 УК РФ)</option>
+        </select>
+      </div>
+
+      <div class="form-group">
+        <label>Суд / Орган (определяется автоматически)</label>
+        <input type="text" id="court-input" disabled placeholder="Выберите статью">
+      </div>
+
+      <div class="form-group">
+        <label>Сумма иска / Ущерб (руб.)</label>
+        <input type="number" id="amount-input" disabled placeholder="Выберите статью">
+      </div>
+
+      <div class="form-group">
+        <label>Госпошлина (руб.)</label>
+        <input type="text" id="fee-input" disabled value="0 руб.">
+      </div>
+
+      <div class="form-group">
+        <label>Прикрепить доказательства (PDF, JPG, PNG до 2 МБ)</label>
+        <div class="file-upload-wrapper" id="file-upload-box">
+          <div id="upload-text">Нажмите, чтобы выбрать файл</div>
+          <div class="file-name" id="file-name-display"></div>
+          <input type="file" id="real-file-input" accept=".pdf,.jpg,.jpeg,.png">
+        </div>
+      </div>
+
+      <button id="submit-claim" style="margin-top: 10px;">Подать в суд</button>
+    </div>
+
+    <div id="tab-my-cases" style="display: none;">
+      <h2 style="margin-bottom: 20px;">Мои дела</h2>
+      
+      <div class="waiting-box" id="waiting-notification" style="display: none;">
+        <div>Ожидание действий со стороны суда</div>
+        <div class="waiting-timer" id="waiting-timer-display">00:00</div>
+        <!-- НОВАЯ СТРОКА -->
+        <div class="waiting-exact-date" id="waiting-exact-date"></div>
+        <div style="font-size: 12px; color: #666; margin-top: 10px;">Пожалуйста, ожидайте. Время течет в реальном масштабе.</div>
+      </div>
+
+      <table class="case-table">
+        <thead>
+          <tr>
+            <th>Номер дела</th>
+            <th>Ответчик</th>
+            <th>Суд</th>
+            <th>Статья</th>
+            <th>Сумма</th>
+            <th>Статус</th>
+            <th>Заседание</th>
+          </tr>
+        </thead>
+        <tbody id="case-list">
+          <tr><td colspan="7" style="text-align: center; color: #999;">У вас пока нет дел</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <div id="tab-calendar" style="display: none;">
+      <h2 style="margin-bottom: 20px;">Календарь заседаний</h2>
+      <div id="calendar-content" style="color: #666;">
+        У вас пока нет назначенных заседаний.
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modal-overlay">
+  <div class="modal">
+    <h3 id="modal-title">Уведомление суда</h3>
+    <p id="modal-text" style="margin-bottom: 20px;"></p>
+    <button id="modal-btn" onclick="document.getElementById('modal-overlay').style.display='none'">Ознакомлен</button>
+  </div>
+</div>
+
+<script>
+let state = {
+  fio: "",
+  activeCases: [],
+  currentDay: 1,
+  currentHour: 9,
+  currentMinute: 0,
+  timers: [],
+  attachedFile: null
+};
+
+const now = new Date();
+document.getElementById('current-date').textContent = now.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: 'numeric' });
+
+const caseSettings = {
+  dtp: { amount: 350000, fee: 7000, isCriminal: false, court: "Липецкий районный суд Липецкой области" },
+  debt: { amount: 50000, fee: 2000, isCriminal: false, court: "Елецкий районный суд Липецкой области" },
+  builder: { amount: 1000000, fee: 15000, isCriminal: false, court: "Липецкий районный суд Липецкой области" },
+  consumer: { amount: 15000, fee: 0, isCriminal: false, court: "Мировой судья Грязинского судебного района" },
+  labor: { amount: 75000, fee: 0, isCriminal: false, court: "Данковский городской суд Липецкой области" },
+  family: { amount: 25000, fee: 0, isCriminal: false, court: "Мировой судья Усманского судебного района" },
+  honor: { amount: 100000, fee: 3000, isCriminal: false, court: "Липецкий районный суд Липецкой области" },
+  property: { amount: 1500000, fee: 15000, isCriminal: false, court: "Лебедянский районный суд Липецкой области" },
+  rent: { amount: 0, fee: 300, isCriminal: false, court: "Задонский районный суд Липецкой области" },
+  land: { amount: 500000, fee: 10000, isCriminal: false, court: "Арбитражный суд Липецкой области" },
+  copyright: { amount: 100000, fee: 2000, isCriminal: false, court: "Липецкий районный суд Липецкой области" },
+  medical: { amount: 500000, fee: 7500, isCriminal: false, court: "Елецкий городской суд Липецкой области" },
+  insurance: { amount: 200000, fee: 4000, isCriminal: false, court: "Липецкий районный суд Липецкой области" },
+  credit: { amount: 300000, fee: 6000, isCriminal: false, court: "Грязинский городской суд Липецкой области" },
+  bankrupt: { amount: 500000, fee: 6000, isCriminal: false, court: "Арбитражный суд Липецкой области" },
+  tax: { amount: 1000000, fee: 15000, isCriminal: false, court: "Арбитражный суд Липецкой области" },
+  
+  traffic: { amount: 5000, fee: 0, isCriminal: false, isAdmin: true, court: "Мировой судья Липецкого районного судебного района" },
+  admin_drunk: { amount: 0, fee: 0, isCriminal: false, isAdmin: true, court: "Мировой судья Елецкого районного судебного района" },
+  admin_speed: { amount: 0, fee: 0, isCriminal: false, isAdmin: true, court: "Мировой судья Грязинского судебного района" },
+  admin_smoking: { amount: 0, fee: 0, isCriminal: false, isAdmin: true, court: "Мировой судья Данковского судебного района" },
+  admin_miting: { amount: 0, fee: 0, isCriminal: false, isAdmin: true, court: "Липецкий районный суд Липецкой области" },
+  admin_fake: { amount: 0, fee: 0, isCriminal: false, isAdmin: true, court: "Мировой судья Усманского судебного района" },
+  
+  terror: { amount: 0, fee: 0, isCriminal: true, court: "Липецкий областной суд" },
+  extremism: { amount: 0, fee: 0, isCriminal: true, court: "Липецкий областной суд" },
+  fraud: { amount: 500000, fee: 0, isCriminal: true, court: "Липецкий районный суд Липецкой области" },
+  theft: { amount: 100000, fee: 0, isCriminal: true, court: "Елецкий городской суд Липецкой области" },
+  bribe: { amount: 1000000, fee: 0, isCriminal: true, court: "Липецкий областной суд" },
+  drugs: { amount: 0, fee: 0, isCriminal: true, court: "Грязинский городской суд Липецкой области" },
+  fake_news: { amount: 0, fee: 0, isCriminal: true, court: "Липецкий районный суд Липецкой области" },
+  hooligan: { amount: 0, fee: 0, isCriminal: true, court: "Данковский городской суд Липецкой области" },
+  murder: { amount: 0, fee: 0, isCriminal: true, court: "Липецкий областной суд" },
+  foreign_agent: { amount: 0, fee: 0, isCriminal: true, court: "Липецкий районный суд Липецкой области" }
+};
+
+document.querySelectorAll('.menu-item').forEach(item => {
+  item.addEventListener('click', () => {
+    document.querySelectorAll('.menu-item').forEach(i => i.classList.remove('active'));
+    item.classList.add('active');
+    document.querySelectorAll('.workspace > div').forEach(div => div.style.display = 'none');
+    document.getElementById(`tab-${item.dataset.tab}`).style.display = 'block';
+  });
+});
+
+document.getElementById('fio-input').addEventListener('input', (e) => {
+  state.fio = e.target.value;
+});
+
+document.getElementById('case-select').addEventListener('change', (e) => {
+  const type = e.target.value;
+  const settings = caseSettings[type];
+  
+  if (settings) {
+    const amountInput = document.getElementById('amount-input');
+    const feeInput = document.getElementById('fee-input');
+    const courtInput = document.getElementById('court-input');
+
+    courtInput.value = settings.court;
+
+    if (settings.isCriminal || settings.isAdmin) {
+      amountInput.value = "Не применимо";
+      feeInput.value = "0 руб. (госпошлина не взимается)";
+    } else {
+      amountInput.value = settings.amount;
+      feeInput.value = `${settings.fee} руб.`;
+    }
+  }
+});
+
+const uploadBox = document.getElementById('file-upload-box');
+const fileInput = document.getElementById('real-file-input');
+const uploadText = document.getElementById('upload-text');
+const fileNameDisplay = document.getElementById('file-name-display');
+
+uploadBox.addEventListener('click', () => fileInput.click());
+
+fileInput.addEventListener('change', (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+
+  const allowedExtensions = ['pdf', 'jpg', 'jpeg', 'png'];
+  const fileExt = file.name.split('.').pop().toLowerCase();
+  
+  if (!allowedExtensions.includes(fileExt)) {
+    alert("ОШИБКА: Неверный формат файла! Суд принимает только PDF, JPG и PNG.");
+    fileInput.value = '';
+    return;
+  }
+
+  if (file.size > 2 * 1024 * 1024) {
+    alert("ОШИБКА: Файл слишком большой! Максимальный размер — 2 МБ.");
+    fileInput.value = '';
+    return;
+  }
+
+  state.attachedFile = file.name;
+  uploadBox.classList.add('success');
+  uploadText.textContent = "✓ Файл успешно прикреплен";
+  fileNameDisplay.textContent = file.name;
+  fileNameDisplay.style.display = 'block';
+});
+
+document.getElementById('submit-claim').addEventListener('click', () => {
+  const caseType = document.getElementById('case-select').value;
+  const caseText = document.getElementById('case-select').options[document.getElementById('case-select').selectedIndex].text;
+  const defendant = document.getElementById('defendant-select').value;
+  
+  const settings = caseSettings[caseType];
+  const isCriminal = settings.isCriminal;
+  const isAdmin = settings.isAdmin;
+  const assignedCourt = settings.court;
+
+  if (!state.fio) { alert("ОШИБКА: Введите ФИО!"); return; }
+  if (!state.attachedFile) { alert("ОШИБКА: Вы не прикрепили доказательства! Суд не примет иск."); return; }
+
+  const finalAmount = (isCriminal || isAdmin) ? "—" : settings.amount;
+  const finalFee = (isCriminal || isAdmin) ? "—" : `${settings.fee} руб.`;
+
+  // Реалистичный номер дела
+  let casePrefix = "2-"; // гражданское
+  if (isAdmin) casePrefix = "5-";
+  if (isCriminal) casePrefix = "1-";
+  
+  const year = new Date().getFullYear();
+  const randomNum = Math.floor(Math.random() * 9000) + 1000;
+  const caseId = `${casePrefix}${randomNum}/${year}`;
+
+  // Проверка доказательств
+  const evidenceStrength = Math.random();
+  let isProofStrong = true;
+  let denyReason = "";
+  const fileNameLower = state.attachedFile.toLowerCase();
+
+  if (fileNameLower.includes("meme") || fileNameLower.includes("смешной") || fileNameLower.includes("верблюд") || fileNameLower.includes("пустой")) {
+    isProofStrong = false;
+    denyReason = "Представленные доказательства не имеют юридической силы (суд не признает мемы и шутки доказательствами).";
+  } else if (evidenceStrength < 0.2) {
+    isProofStrong = false;
+    denyReason = "Недостаточно доказательств для вынесения решения в вашу пользу.";
+  }
+
+  const newCase = {
+    id: caseId,
+    court: assignedCourt,
+    type: caseText,
+    defendant: defendant,
+    amount: finalAmount,
+    fee: finalFee,
+    status: "Зарегистрирован",
+    statusClass: "status-pending",
+    hearingDate: "Не назначено",
+    isCriminal: isCriminal,
+    isAdmin: isAdmin
+  };
+
+  state.activeCases.push(newCase);
+  
+  state.attachedFile = null;
+  uploadBox.classList.remove('success');
+  uploadText.textContent = "Нажмите, чтобы выбрать файл";
+  fileNameDisplay.style.display = 'none';
+  fileInput.value = '';
+
+  document.querySelector('.menu-item[data-tab="my-cases"]').click();
+  renderCases();
+
+  showModal(`Иск против ${defendant} зарегистрирован под номером ${caseId} в ${assignedCourt}. Ожидайте назначения судьи.`, "Уведомление суда");
+
+  startWaiting(newCase, 3, () => {
+    newCase.status = "Принят к производству";
+    newCase.statusClass = "status-accepted";
+    renderCases();
+    showModal(`Дело ${caseId} против ${defendant} принято к производству.`, "Уведомление суда");
+    
+    startWaiting(newCase, 10, () => {
+      newCase.status = "Назначено заседание";
+      newCase.statusClass = "status-hearing";
+      const hearingDay = state.currentDay + 5;
+      newCase.hearingDate = `День ${hearingDay}`;
+      renderCases();
+      renderCalendar();
+      showModal(`Назначено судебное заседание по делу ${caseId} (Ответчик: ${defendant}) на День ${hearingDay}.`, "Повестка в суд");
+      
+      startWaiting(newCase, 5, () => {
+        if (isProofStrong) {
+          newCase.status = "Заседание завершено (Иск удовлетворен)";
+          newCase.statusClass = "status-closed";
+          renderCases();
+          showModal(`Суд вынес решение в вашу пользу по делу ${caseId}. ${defendant} обязан выплатить вам ${finalAmount} руб.`, "Решение суда");
+        } else {
+          newCase.status = "Отказ в иске";
+          newCase.statusClass = "status-denied";
+          renderCases();
+          showModal(`Суд ОТКАЗАЛ в удовлетворении иска против ${defendant}. Причина: ${denyReason}`, "Отказ в иске");
+        }
+      });
+    });
+  });
+});
+
+function startWaiting(caseObj, daysToWait, callback) {
+  const waitingBox = document.getElementById('waiting-notification');
+  const timerDisplay = document.getElementById('waiting-timer-display');
+  const exactDateDisplay = document.getElementById('waiting-exact-date');
+  
+  if (document.getElementById('tab-my-cases').style.display !== 'none') {
+    waitingBox.style.display = 'block';
+  }
+
+  // Считаем точную дату окончания ожидания
+  const now = new Date();
+  const finishDate = new Date(now.getTime() + daysToWait * 24 * 60 * 60 * 1000);
+  
+  const options = { day: 'numeric', month: 'long', year: 'numeric', hour: '2-digit', minute: '2-digit' };
+  exactDateDisplay.textContent = `Ожидаемое событие: ${finishDate.toLocaleDateString('ru-RU', options)}`;
+
+  let totalMinutes = daysToWait * 24 * 60;
+  let passedMinutes = 0;
+
+  const interval = setInterval(() => {
+    passedMinutes++;
+    state.currentMinute++;
+    if (state.currentMinute >= 60) {
+      state.currentMinute = 0;
+      state.currentHour++;
+      if (state.currentHour >= 24) {
+        state.currentHour = 0;
+        state.currentDay++;
+      }
+    }
+
+    // Красивое отображение оставшегося времени
+    const minutesLeftTotal = totalMinutes - passedMinutes;
+    const daysLeft = Math.floor(minutesLeftTotal / (24 * 60));
+    const hoursLeft = Math.floor((minutesLeftTotal % (24 * 60)) / 60);
+    const minsLeft = minutesLeftTotal % 60;
+    
+    if (document.getElementById('tab-my-cases').style.display !== 'none') {
+      if (daysLeft > 0) {
+        timerDisplay.textContent = `${daysLeft} д. ${hoursLeft} ч.`;
+      } else {
+        timerDisplay.textContent = `${hoursLeft} ч. ${minsLeft} мин.`;
+      }
+    }
+
+    if (passedMinutes >= totalMinutes) {
+      clearInterval(interval);
+      if (document.getElementById('tab-my-cases').style.display !== 'none') {
+        waitingBox.style.display = 'none';
+      }
+      callback();
+    }
+  }, 60000); // 1 минута реального времени
+
+  state.timers.push(interval);
+}
+
+function renderCases() {
+  const tbody = document.getElementById('case-list');
+  tbody.innerHTML = '';
+  
+  if (state.activeCases.length === 0) {
+    tbody.innerHTML = '<tr><td colspan="7" style="text-align: center; color: #999;">У вас пока нет дел</td></tr>';
+    return;
+  }
+
+  state.activeCases.forEach(c => {
+    const tr = document.createElement('tr');
+    tr.innerHTML = `
+      <td>${c.id}</td>
+      <td>${c.defendant}</td>
+      <td>${c.court}</td>
+      <td>${c.type}</td>
+      <td>${c.amount} ${c.amount !== "—" ? "руб." : ""}</td>
+      <td><span class="status-badge ${c.statusClass}">${c.status}</span></td>
+      <td>${c.hearingDate}</td>
+    `;
+    tbody.appendChild(tr);
+  });
+}
+
+function renderCalendar() {
+  const cal = document.getElementById('calendar-content');
+  const events = state.activeCases.filter(c => c.hearingDate !== "Не назначено");
+  
+  if (events.length === 0) {
+    cal.innerHTML = 'У вас пока нет назначенных заседаний.';
+    return;
+  }
+
+  cal.innerHTML = events.map(c => `
+    <div style="border-left: 4px solid #1a3b5c; padding: 10px; background: #f8f9fa; margin-bottom: 10px;">
+      <strong>${c.hearingDate}</strong> — Заседание по делу №${c.id} против <b>${c.defendant}</b> в ${c.court}
+    </div>
+  `).join('');
+}
+
+function showModal(text, title = "Уведомление суда") {
+  document.getElementById('modal-title').textContent = title;
+  document.getElementById('modal-text').textContent = text;
+  document.getElementById('modal-overlay').style.display = 'flex';
+}
+
+renderCases();
+</script>
+</body>
+</html>
